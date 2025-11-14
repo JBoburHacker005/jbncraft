@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Clone</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="ui">
+        <div id="crosshair"></div>
+        <div id="inventory">
+            <div class="inventory-slot active" data-block="grass">
+                <div class="block-preview grass"></div>
+                <div class="slot-number">1</div>
+            </div>
+            <div class="inventory-slot" data-block="dirt">
+                <div class="block-preview dirt"></div>
+                <div class="slot-number">2</div>
+            </div>
+            <div class="inventory-slot" data-block="stone">
+                <div class="block-preview stone"></div>
+                <div class="slot-number">3</div>
+            </div>
+            <div class="inventory-slot" data-block="wood">
+                <div class="block-preview wood"></div>
+                <div class="slot-number">4</div>
+            </div>
+            <div class="inventory-slot" data-block="sand">
+                <div class="block-preview sand"></div>
+                <div class="slot-number">5</div>
+            </div>
+            <div class="inventory-slot" data-block="cobblestone">
+                <div class="block-preview cobblestone"></div>
+                <div class="slot-number">6</div>
+            </div>
+            <div class="inventory-slot" data-block="leaves">
+                <div class="block-preview leaves"></div>
+                <div class="slot-number">7</div>
+            </div>
+            <div class="inventory-slot" data-block="glass">
+                <div class="block-preview glass"></div>
+                <div class="slot-number">8</div>
+            </div>
+        </div>
+        <div id="instructions">
+            <p><strong>WASD</strong> - Harakat | <strong>Space</strong> - Sakrash | <strong>Sichqoncha</strong> - Qarash</p>
+            <p><strong>Chap Tugma</strong> - Blokni buzish | <strong>O'ng Tugma</strong> - Blok qo'yish</p>
+            <p><strong>1-8</strong> - Blok turini tanlash</p>
+            <p><strong>ESC</strong> - Sichqonchani qulfdan ochish</p>
+        </div>
+        <div id="block-name"></div>
+        <div id="fps-counter">FPS: 60</div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
+
