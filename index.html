@@ -3,55 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JBNcraft</title>
+    <title>Creativecraft</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="game-container"></div>
     <div id="ui">
         <div id="crosshair"></div>
+        <div id="health-bar"></div>
+        <div id="food-bar"></div>
+        <button id="camera-toggle" title="Kamera ko'rinishini o'zgartirish (F)">📷</button>
         <div id="inventory">
-            <div class="inventory-slot active" data-block="grass">
+            <div class="inventory-slot active" data-block="grass" data-type="block">
                 <div class="block-preview grass"></div>
                 <div class="slot-number">1</div>
             </div>
-            <div class="inventory-slot" data-block="dirt">
+            <div class="inventory-slot" data-block="dirt" data-type="block">
                 <div class="block-preview dirt"></div>
                 <div class="slot-number">2</div>
             </div>
-            <div class="inventory-slot" data-block="stone">
+            <div class="inventory-slot" data-block="stone" data-type="block">
                 <div class="block-preview stone"></div>
                 <div class="slot-number">3</div>
             </div>
-            <div class="inventory-slot" data-block="wood">
+            <div class="inventory-slot" data-block="wood" data-type="block">
                 <div class="block-preview wood"></div>
                 <div class="slot-number">4</div>
             </div>
-            <div class="inventory-slot" data-block="sand">
-                <div class="block-preview sand"></div>
+            <div class="inventory-slot" data-item="pickaxe" data-type="tool">
+                <div class="item-preview">⛏️</div>
                 <div class="slot-number">5</div>
             </div>
-            <div class="inventory-slot" data-block="cobblestone">
-                <div class="block-preview cobblestone"></div>
+            <div class="inventory-slot" data-item="axe" data-type="tool">
+                <div class="item-preview">🪓</div>
                 <div class="slot-number">6</div>
             </div>
-            <div class="inventory-slot" data-block="leaves">
-                <div class="block-preview leaves"></div>
+            <div class="inventory-slot" data-item="sword" data-type="tool">
+                <div class="item-preview">⚔️</div>
                 <div class="slot-number">7</div>
             </div>
-            <div class="inventory-slot" data-block="glass">
-                <div class="block-preview glass"></div>
+            <div class="inventory-slot" data-item="shovel" data-type="tool">
+                <div class="item-preview">🪚</div>
                 <div class="slot-number">8</div>
+            </div>
+            <div class="inventory-slot" data-item="hoe" data-type="tool">
+                <div class="item-preview">🔨</div>
+                <div class="slot-number">9</div>
+            </div>
+            <div class="inventory-slot" data-item="apple" data-type="item">
+                <div class="item-preview">🍎</div>
+                <div class="slot-number">0</div>
             </div>
         </div>
         <div id="instructions">
             <p><strong>WASD</strong> - Harakat | <strong>Space</strong> - Sakrash | <strong>Sichqoncha</strong> - Qarash</p>
             <p><strong>Chap Tugma</strong> - Blokni buzish | <strong>O'ng Tugma</strong> - Blok qo'yish</p>
-            <p><strong>1-8</strong> - Blok turini tanlash</p>
+            <p><strong>1-0</strong> - Blok/Qurol turini tanlash</p>
+            <p><strong>F</strong> - Kamera ko'rinishini o'zgartirish</p>
             <p><strong>ESC</strong> - Sichqonchani qulfdan ochish</p>
         </div>
         <div id="block-name"></div>
-        <div id="fps-counter">FPS: 60</div>
+        <div id="fps-counter">FPS: 120</div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="game.js"></script>

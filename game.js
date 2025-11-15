@@ -17,6 +17,15 @@ let isBreaking = false;
 let fps = 0;
 let fpsCounter = 0;
 let fpsTime = 0;
+let entities = [];
+let playerModel = null;
+let cameraMode = 'first'; // 'first' or 'third'
+let health = 20;
+let maxHealth = 20;
+let food = 20;
+let maxFood = 20;
+let playerGroup = null;
+let playerPosition = new THREE.Vector3(0, 20, 0); // Actual player position
 
 // Block types with more realistic colors
 const blockTypes = {
@@ -38,23 +47,36 @@ function init() {
     scene.background = new THREE.Color(0x87CEEB); // Sky blue
     scene.fog = new THREE.Fog(0x87CEEB, 50, 150); // Optimized fog distance
 
+    // Player group for third-person view
+    playerGroup = new THREE.Group();
+    scene.add(playerGroup);
+    
+    // Create simple player model
+    createPlayerModel();
+    
     // Camera setup - optimized far plane
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
-    camera.position.set(0, 20, 0);
+    playerPosition.set(0, 20, 0);
+    camera.position.copy(playerPosition);
+    camera.position.y += 0.9; // Eye height
+    playerGroup.position.copy(playerPosition);
+    playerGroup.position.y -= 0.9;
     euler.setFromQuaternion(camera.quaternion);
 
-    // Renderer setup - optimized for 60 FPS
+    // Renderer setup - optimized for 120 FPS
     renderer = new THREE.WebGLRenderer({ 
         antialias: false, // Disable for better performance
         powerPreference: "high-performance",
         stencil: false,
-        depth: true
+        depth: true,
+        logarithmicDepthBuffer: false
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // Limit pixel ratio for performance
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Limit pixel ratio for performance
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Better shadows
+    renderer.shadowMap.type = THREE.BasicShadowMap; // Faster shadows
     renderer.sortObjects = false; // Disable sorting for better performance
+    renderer.autoClear = true;
     document.getElementById('game-container').appendChild(renderer.domElement);
 
     // Lighting - more realistic
@@ -65,15 +87,16 @@ function init() {
     directionalLight.position.set(50, 100, 50);
     directionalLight.castShadow = true;
     // Optimized shadow map size for better FPS
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
+    directionalLight.shadow.mapSize.width = 512; // Reduced for better performance
+    directionalLight.shadow.mapSize.height = 512;
     directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 200; // Reduced far distance
-    directionalLight.shadow.camera.left = -50;
-    directionalLight.shadow.camera.right = 50;
-    directionalLight.shadow.camera.top = 50;
-    directionalLight.shadow.camera.bottom = -50;
+    directionalLight.shadow.camera.far = 150; // Reduced far distance
+    directionalLight.shadow.camera.left = -40;
+    directionalLight.shadow.camera.right = 40;
+    directionalLight.shadow.camera.top = 40;
+    directionalLight.shadow.camera.bottom = -40;
     directionalLight.shadow.bias = -0.0001; // Reduce shadow acne
+    directionalLight.shadow.radius = 2; // Softer shadows
     scene.add(directionalLight);
 
     // Add hemisphere light for better ambient
@@ -82,9 +105,15 @@ function init() {
 
     // Generate world
     generateWorld();
+    
+    // Spawn animals
+    spawnAnimals();
 
     // Event listeners
     setupEventListeners();
+    
+    // Initialize UI
+    initUI();
 
     // Start animation loop
     animate();
@@ -175,6 +204,203 @@ function generateWorld() {
     }
 }
 
+// Create player model - improved
+function createPlayerModel() {
+    const group = new THREE.Group();
+    
+    // Head
+    const headGeometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+    const headMaterial = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+    const head = new THREE.Mesh(headGeometry, headMaterial);
+    head.position.set(0, 1.6, 0);
+    head.castShadow = true;
+    group.add(head);
+    
+    // Body
+    const bodyGeometry = new THREE.BoxGeometry(0.4, 0.6, 0.2);
+    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x4a90e2 });
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.position.set(0, 1.1, 0);
+    body.castShadow = true;
+    group.add(body);
+    
+    // Arms
+    const armGeometry = new THREE.BoxGeometry(0.15, 0.5, 0.15);
+    const armMaterial = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+    const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+    leftArm.position.set(-0.3, 1.1, 0);
+    leftArm.castShadow = true;
+    group.add(leftArm);
+    const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+    rightArm.position.set(0.3, 1.1, 0);
+    rightArm.castShadow = true;
+    group.add(rightArm);
+    
+    // Legs
+    const legGeometry = new THREE.BoxGeometry(0.15, 0.5, 0.15);
+    const legMaterial = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
+    const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+    leftLeg.position.set(-0.1, 0.5, 0);
+    leftLeg.castShadow = true;
+    group.add(leftLeg);
+    const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+    rightLeg.position.set(0.1, 0.5, 0);
+    rightLeg.castShadow = true;
+    group.add(rightLeg);
+    
+    group.castShadow = true;
+    group.receiveShadow = false; // Player doesn't need to receive shadows
+    playerModel = group;
+    playerGroup.add(playerModel);
+    playerModel.visible = false; // Hidden by default (first-person)
+}
+
+// Spawn animals
+function spawnAnimals() {
+    const worldSize = 30;
+    const animalTypes = ['cow', 'pig', 'chicken', 'sheep'];
+    
+    for (let i = 0; i < 30; i++) {
+        const x = (Math.random() * worldSize * 2) - worldSize;
+        const z = (Math.random() * worldSize * 2) - worldSize;
+        const y = getBlockHeight(Math.floor(x), Math.floor(z)) + 1;
+        
+        if (y > 0 && y < 20) {
+            const animalType = animalTypes[Math.floor(Math.random() * animalTypes.length)];
+            createAnimal(x, y, z, animalType);
+        }
+    }
+}
+
+// Create animal
+function createAnimal(x, y, z, type) {
+    const group = new THREE.Group();
+    group.position.set(x, y, z);
+    
+    let bodyColor, size;
+    switch(type) {
+        case 'cow':
+            bodyColor = 0xffffff;
+            size = 0.6;
+            break;
+        case 'pig':
+            bodyColor = 0xffb3d9;
+            size = 0.5;
+            break;
+        case 'chicken':
+            bodyColor = 0xffffff;
+            size = 0.3;
+            break;
+        case 'sheep':
+            bodyColor = 0xffffff;
+            size = 0.6;
+            break;
+        default:
+            bodyColor = 0xffffff;
+            size = 0.5;
+    }
+    
+    // Body
+    const bodyGeometry = new THREE.BoxGeometry(size, size * 0.8, size * 1.2);
+    const bodyMaterial = new THREE.MeshLambertMaterial({ color: bodyColor });
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    group.add(body);
+    
+    // Head
+    const headGeometry = new THREE.BoxGeometry(size * 0.6, size * 0.6, size * 0.6);
+    const headMaterial = new THREE.MeshLambertMaterial({ color: bodyColor });
+    const head = new THREE.Mesh(headGeometry, headMaterial);
+    head.position.set(0, 0, size * 0.7);
+    head.castShadow = true;
+    group.add(head);
+    
+    // Legs
+    const legGeometry = new THREE.BoxGeometry(size * 0.2, size * 0.6, size * 0.2);
+    const legMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+    const positions = [
+        [-size * 0.3, -size * 0.7, size * 0.3],
+        [size * 0.3, -size * 0.7, size * 0.3],
+        [-size * 0.3, -size * 0.7, -size * 0.3],
+        [size * 0.3, -size * 0.7, -size * 0.3]
+    ];
+    positions.forEach(pos => {
+        const leg = new THREE.Mesh(legGeometry, legMaterial);
+        leg.position.set(...pos);
+        leg.castShadow = true;
+        group.add(leg);
+    });
+    
+    const entity = {
+        type: type,
+        mesh: group,
+        position: new THREE.Vector3(x, y, z),
+        velocity: new THREE.Vector3(),
+        direction: Math.random() * Math.PI * 2,
+        speed: 0.5 + Math.random() * 0.5,
+        wanderTime: 0,
+        wanderDuration: 2 + Math.random() * 3
+    };
+    
+    entities.push(entity);
+    scene.add(group);
+}
+
+// Update entities - improved with collision
+function updateEntities(delta) {
+    entities.forEach(entity => {
+        entity.wanderTime += delta;
+        
+        if (entity.wanderTime >= entity.wanderDuration) {
+            entity.direction = Math.random() * Math.PI * 2;
+            entity.wanderDuration = 2 + Math.random() * 3;
+            entity.wanderTime = 0;
+        }
+        
+        // Move entity
+        const moveX = Math.sin(entity.direction) * entity.speed * delta;
+        const moveZ = Math.cos(entity.direction) * entity.speed * delta;
+        
+        const newX = entity.position.x + moveX;
+        const newZ = entity.position.z + moveZ;
+        const newY = getBlockHeight(Math.floor(newX), Math.floor(newZ)) + 0.5;
+        
+        // Simple collision check - don't move into blocks
+        const checkX = Math.floor(newX);
+        const checkZ = Math.floor(newZ);
+        const keyX = `${checkX},${Math.floor(newY)},${Math.floor(entity.position.z)}`;
+        const keyZ = `${Math.floor(entity.position.x)},${Math.floor(newY)},${checkZ}`;
+        
+        let canMoveX = !world[keyX];
+        let canMoveZ = !world[keyZ];
+        
+        if (newY > 0 && newY < 50) {
+            if (canMoveX) {
+                entity.position.x = newX;
+            } else {
+                entity.direction += Math.PI; // Turn around
+            }
+            
+            if (canMoveZ) {
+                entity.position.z = newZ;
+            } else if (!canMoveX) {
+                entity.direction += Math.PI; // Turn around
+            }
+            
+            entity.position.y = newY;
+            entity.mesh.position.copy(entity.position);
+            
+            // Rotate entity to face movement direction
+            if (canMoveX || canMoveZ) {
+                entity.mesh.rotation.y = entity.direction;
+            }
+        } else {
+            entity.direction += Math.PI; // Turn around
+        }
+    });
+}
+
 // Get block height at position
 function getBlockHeight(x, z) {
     const floorX = Math.floor(x);
@@ -191,6 +417,8 @@ function getBlockHeight(x, z) {
 
 // Shared geometry for all blocks (optimization)
 const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+// Merge geometry for better performance
+blockGeometry.computeBoundingBox();
 
 // Material cache for better performance
 const materialCache = {};
@@ -246,6 +474,7 @@ function createBlock(x, y, z, type = 'grass') {
     block.receiveShadow = true;
     block.userData = { type, x: floorX, y: floorY, z: floorZ };
     block.frustumCulled = true; // Enable frustum culling for performance
+    block.matrixAutoUpdate = true;
     
     scene.add(block);
     world[key] = block;
@@ -297,25 +526,65 @@ function setupEventListeners() {
         slot.addEventListener('click', () => {
             inventorySlots.forEach(s => s.classList.remove('active'));
             slot.classList.add('active');
-            selectedBlock = slot.dataset.block;
+            if (slot.dataset.type === 'block') {
+                selectedBlock = slot.dataset.block;
+            } else if (slot.dataset.type === 'tool') {
+                // Tool selected - could add tool functionality here
+                selectedBlock = null;
+            } else if (slot.dataset.type === 'item') {
+                // Item selected - could add item usage here
+                selectedBlock = null;
+            }
         });
     });
     
     // Number key selection for inventory
     document.addEventListener('keydown', (e) => {
         const num = parseInt(e.key);
-        if (num >= 1 && num <= inventorySlots.length) {
+        if (num >= 1 && num <= 9) {
             inventorySlots[num - 1].click();
+        } else if (e.key === '0') {
+            inventorySlots[9].click();
         }
     });
+    
+    // Camera toggle button
+    const cameraBtn = document.getElementById('camera-toggle');
+    if (cameraBtn) {
+        cameraBtn.addEventListener('click', toggleCameraMode);
+    }
     
     // Update block name display
     updateBlockName();
 }
 
+// Tool types
+const toolTypes = {
+    pickaxe: { name: 'Pickaxe', color: 0x808080, icon: '⛏️' },
+    axe: { name: 'Axe', color: 0x8b4513, icon: '🪓' },
+    sword: { name: 'Sword', color: 0xc0c0c0, icon: '⚔️' },
+    shovel: { name: 'Shovel', color: 0x696969, icon: '🪚' },
+    hoe: { name: 'Hoe', color: 0x654321, icon: '🔨' }
+};
+
+// Item types
+const itemTypes = {
+    apple: { name: 'Apple', color: 0xff0000, icon: '🍎' },
+    bread: { name: 'Bread', color: 0xdeb887, icon: '🍞' },
+    meat: { name: 'Meat', color: 0x8b0000, icon: '🍖' },
+    stick: { name: 'Stick', color: 0x8b4513, icon: '🪵' },
+    coal: { name: 'Coal', color: 0x1a1a1a, icon: '⚫' }
+};
+
 // Update block name display - optimized (only update when needed)
 let lastBlockName = '';
+let lastBlockCheck = 0;
 function updateBlockName() {
+    const now = performance.now();
+    // Only check every 100ms for performance
+    if (now - lastBlockCheck < 100) return;
+    lastBlockCheck = now;
+    
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     raycaster.far = 5;
     const intersects = raycaster.intersectObjects(Object.values(world), false);
@@ -359,6 +628,9 @@ function onKeyDown(event) {
                 velocity.y = 8; // Jump velocity
                 canJump = false;
             }
+            break;
+        case 'KeyF':
+            toggleCameraMode();
             break;
     }
 }
@@ -467,17 +739,18 @@ function placeBlock() {
         const key = `${newX},${newY},${newZ}`;
         if (!world[key]) {
             // Check distance to player (prevent placing inside player)
-            const playerPos = camera.position;
+            const eyePos = playerPosition.clone();
+            eyePos.y += 0.9;
             const blockCenter = new THREE.Vector3(newX + 0.5, newY + 0.5, newZ + 0.5);
-            const distToPlayer = playerPos.distanceTo(blockCenter);
+            const distToPlayer = eyePos.distanceTo(blockCenter);
             
             // Check if block would intersect with player using AABB
-            const playerMinX = playerPos.x - 0.3;
-            const playerMaxX = playerPos.x + 0.3;
-            const playerMinY = playerPos.y - 0.1;
-            const playerMaxY = playerPos.y + 1.7;
-            const playerMinZ = playerPos.z - 0.3;
-            const playerMaxZ = playerPos.z + 0.3;
+            const playerMinX = playerPosition.x - 0.3;
+            const playerMaxX = playerPosition.x + 0.3;
+            const playerMinY = playerPosition.y - 0.9;
+            const playerMaxY = playerPosition.y + 0.9;
+            const playerMinZ = playerPosition.z - 0.3;
+            const playerMaxZ = playerPosition.z + 0.3;
             
             const blockMinX = newX;
             const blockMaxX = newX + 1;
@@ -513,8 +786,84 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// Initialize UI
+function initUI() {
+    updateHealthBar();
+    updateFoodBar();
+}
+
+// Update health bar
+function updateHealthBar() {
+    const healthBar = document.getElementById('health-bar');
+    if (healthBar) {
+        const hearts = Math.ceil(health / 2);
+        const fullHearts = Math.floor(health / 2);
+        const halfHeart = health % 2 === 1;
+        
+        let html = '';
+        for (let i = 0; i < 10; i++) {
+            if (i < fullHearts) {
+                html += '<span class="heart full">❤️</span>';
+            } else if (i === fullHearts && halfHeart) {
+                html += '<span class="heart half">💛</span>';
+            } else {
+                html += '<span class="heart empty">🤍</span>';
+            }
+        }
+        healthBar.innerHTML = html;
+    }
+}
+
+// Update food bar
+function updateFoodBar() {
+    const foodBar = document.getElementById('food-bar');
+    if (foodBar) {
+        const foodLevel = Math.ceil(food / 2);
+        const fullFood = Math.floor(food / 2);
+        const halfFood = food % 2 === 1;
+        
+        let html = '';
+        for (let i = 0; i < 10; i++) {
+            if (i < fullFood) {
+                html += '<span class="food full">🍖</span>';
+            } else if (i === fullFood && halfFood) {
+                html += '<span class="food half">🍗</span>';
+            } else {
+                html += '<span class="food empty">⚪</span>';
+            }
+        }
+        foodBar.innerHTML = html;
+    }
+}
+
+// Toggle camera mode
+function toggleCameraMode() {
+    cameraMode = cameraMode === 'first' ? 'third' : 'first';
+    const cameraBtn = document.getElementById('camera-toggle');
+    if (cameraBtn) {
+        cameraBtn.textContent = cameraMode === 'first' ? '📷' : '👤';
+    }
+    
+    // Reset camera position when switching
+    if (cameraMode === 'first') {
+        // Return to first-person (camera at player position)
+        camera.position.copy(playerPosition);
+        camera.position.y += 0.9; // Eye height
+    }
+}
+
 // Update player movement - improved physics
 function updatePlayer(delta) {
+    // Rotate player model to face movement direction
+    if (playerModel && (moveForward || moveBackward || moveLeft || moveRight)) {
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyQuaternion(camera.quaternion);
+        forward.y = 0;
+        forward.normalize();
+        const angle = Math.atan2(forward.x, forward.z);
+        playerModel.rotation.y = angle;
+    }
+    
     // Friction
     velocity.x *= Math.pow(0.6, delta * 10);
     velocity.z *= Math.pow(0.6, delta * 10);
@@ -556,43 +905,40 @@ function updatePlayer(delta) {
         velocity.z = (velocity.z / horizontalVel) * speed;
     }
     
-    // Calculate new position
-    const newX = camera.position.x + velocity.x * delta;
-    const newY = camera.position.y + velocity.y * delta;
-    const newZ = camera.position.z + velocity.z * delta;
-
-    // Improved AABB collision detection
+    // Improved AABB collision detection with separate axis checking
     const playerWidth = 0.3;
     const playerHeight = 1.8;
-    const playerFeetY = newY - 0.9;
-    const playerHeadY = newY + 0.9;
+    const playerEyeHeight = 0.9;
     
-    // Player AABB bounds
-    const playerMinX = newX - playerWidth;
-    const playerMaxX = newX + playerWidth;
-    const playerMinY = playerFeetY;
-    const playerMaxY = playerHeadY;
-    const playerMinZ = newZ - playerWidth;
-    const playerMaxZ = newZ + playerWidth;
-    
-    let canMoveX = true, canMoveY = true, canMoveZ = true;
     let onGround = false;
-
-    // Check all blocks that could intersect with player
+    let correctedX = playerPosition.x;
+    let correctedY = playerPosition.y;
+    let correctedZ = playerPosition.z;
+    
+    // Check collision for X axis first
+    const testX = playerPosition.x + velocity.x * delta;
+    let canMoveX = true;
+    
+    const playerMinX = testX - playerWidth;
+    const playerMaxX = testX + playerWidth;
+    const playerMinY = playerPosition.y - playerEyeHeight;
+    const playerMaxY = playerPosition.y + playerEyeHeight;
+    const playerMinZ = playerPosition.z - playerWidth;
+    const playerMaxZ = playerPosition.z + playerWidth;
+    
     const minBlockX = Math.floor(playerMinX);
     const maxBlockX = Math.floor(playerMaxX);
     const minBlockY = Math.floor(playerMinY);
     const maxBlockY = Math.floor(playerMaxY);
     const minBlockZ = Math.floor(playerMinZ);
     const maxBlockZ = Math.floor(playerMaxZ);
-
+    
     for (let bx = minBlockX; bx <= maxBlockX; bx++) {
         for (let by = minBlockY; by <= maxBlockY; by++) {
             for (let bz = minBlockZ; bz <= maxBlockZ; bz++) {
                 const key = `${bx},${by},${bz}`;
                 if (!world[key]) continue;
                 
-                // Block AABB bounds
                 const blockMinX = bx;
                 const blockMaxX = bx + 1;
                 const blockMinY = by;
@@ -600,90 +946,311 @@ function updatePlayer(delta) {
                 const blockMinZ = bz;
                 const blockMaxZ = bz + 1;
                 
-                // Check AABB intersection
-                const intersects = !(
-                    playerMaxX < blockMinX || playerMinX > blockMaxX ||
-                    playerMaxY < blockMinY || playerMinY > blockMaxY ||
-                    playerMaxZ < blockMinZ || playerMinZ > blockMaxZ
-                );
+                if (!(playerMaxX <= blockMinX || playerMinX >= blockMaxX ||
+                      playerMaxY <= blockMinY || playerMinY >= blockMaxY ||
+                      playerMaxZ <= blockMinZ || playerMinZ >= blockMaxZ)) {
+                    canMoveX = false;
+                    if (testX < bx + 0.5) {
+                        correctedX = blockMinX - playerWidth - 0.001;
+                    } else {
+                        correctedX = blockMaxX + playerWidth + 0.001;
+                    }
+                    velocity.x = 0;
+                    break;
+                }
+            }
+            if (!canMoveX) break;
+        }
+        if (!canMoveX) break;
+    }
+    
+    if (canMoveX) {
+        correctedX = testX;
+    }
+    
+    // Check collision for Z axis
+    const testZ = playerPosition.z + velocity.z * delta;
+    let canMoveZ = true;
+    
+    const playerMinX2 = correctedX - playerWidth;
+    const playerMaxX2 = correctedX + playerWidth;
+    const playerMinZ2 = testZ - playerWidth;
+    const playerMaxZ2 = testZ + playerWidth;
+    
+    const minBlockZ2 = Math.floor(playerMinZ2);
+    const maxBlockZ2 = Math.floor(playerMaxZ2);
+    const minBlockX2 = Math.floor(playerMinX2);
+    const maxBlockX2 = Math.floor(playerMaxX2);
+    
+    for (let bx = minBlockX2; bx <= maxBlockX2; bx++) {
+        for (let by = minBlockY; by <= maxBlockY; by++) {
+            for (let bz = minBlockZ2; bz <= maxBlockZ2; bz++) {
+                const key = `${bx},${by},${bz}`;
+                if (!world[key]) continue;
                 
-                if (intersects) {
-                    // Determine which axis to resolve collision on
-                    const overlapX = Math.min(playerMaxX - blockMinX, blockMaxX - playerMinX);
-                    const overlapY = Math.min(playerMaxY - blockMinY, blockMaxY - playerMinY);
-                    const overlapZ = Math.min(playerMaxZ - blockMinZ, blockMaxZ - playerMinZ);
+                const blockMinX = bx;
+                const blockMaxX = bx + 1;
+                const blockMinY = by;
+                const blockMaxY = by + 1;
+                const blockMinZ = bz;
+                const blockMaxZ = bz + 1;
+                
+                if (!(playerMaxX2 <= blockMinX || playerMinX2 >= blockMaxX ||
+                      playerMaxY <= blockMinY || playerMinY >= blockMaxY ||
+                      playerMaxZ2 <= blockMinZ || playerMinZ2 >= blockMaxZ)) {
+                    canMoveZ = false;
+                    if (testZ < bz + 0.5) {
+                        correctedZ = blockMinZ - playerWidth - 0.001;
+                    } else {
+                        correctedZ = blockMaxZ + playerWidth + 0.001;
+                    }
+                    velocity.z = 0;
+                    break;
+                }
+            }
+            if (!canMoveZ) break;
+        }
+        if (!canMoveZ) break;
+    }
+    
+    if (canMoveZ) {
+        correctedZ = testZ;
+    }
+    
+    // Check collision for Y axis
+    const testY = playerPosition.y + velocity.y * delta;
+    let canMoveY = true;
+    
+    const playerMinY2 = testY - playerEyeHeight;
+    const playerMaxY2 = testY + playerEyeHeight;
+    
+    const minBlockY2 = Math.floor(playerMinY2);
+    const maxBlockY2 = Math.floor(playerMaxY2);
+    const minBlockX3 = Math.floor(correctedX - playerWidth);
+    const maxBlockX3 = Math.floor(correctedX + playerWidth);
+    const minBlockZ3 = Math.floor(correctedZ - playerWidth);
+    const maxBlockZ3 = Math.floor(correctedZ + playerWidth);
+    
+    for (let bx = minBlockX3; bx <= maxBlockX3; bx++) {
+        for (let by = minBlockY2; by <= maxBlockY2; by++) {
+            for (let bz = minBlockZ3; bz <= maxBlockZ3; bz++) {
+                const key = `${bx},${by},${bz}`;
+                if (!world[key]) continue;
+                
+                const blockMinX = bx;
+                const blockMaxX = bx + 1;
+                const blockMinY = by;
+                const blockMaxY = by + 1;
+                const blockMinZ = bz;
+                const blockMaxZ = bz + 1;
+                
+                if (!(correctedX + playerWidth <= blockMinX || correctedX - playerWidth >= blockMaxX ||
+                      playerMaxY2 <= blockMinY || playerMinY2 >= blockMaxY ||
+                      correctedZ + playerWidth <= blockMinZ || correctedZ - playerWidth >= blockMaxZ)) {
+                    canMoveY = false;
+                    if (testY > by + 0.5) {
+                        correctedY = blockMaxY + playerEyeHeight + 0.001;
+                        velocity.y = Math.max(0, velocity.y);
+                    } else {
+                        correctedY = blockMinY - playerEyeHeight - 0.001;
+                        velocity.y = 0;
+                        onGround = true;
+                        canJump = true;
+                    }
+                    break;
+                }
+            }
+            if (!canMoveY) break;
+        }
+        if (!canMoveY) break;
+    }
+    
+    if (canMoveY) {
+        correctedY = testY;
+    }
+    
+    // Final check: ensure player is not inside any block
+    const finalMinX = Math.floor(correctedX - playerWidth);
+    const finalMaxX = Math.floor(correctedX + playerWidth);
+    const finalMinY = Math.floor(correctedY - playerEyeHeight);
+    const finalMaxY = Math.floor(correctedY + playerEyeHeight);
+    const finalMinZ = Math.floor(correctedZ - playerWidth);
+    const finalMaxZ = Math.floor(correctedZ + playerWidth);
+    
+    for (let bx = finalMinX; bx <= finalMaxX; bx++) {
+        for (let by = finalMinY; by <= finalMaxY; by++) {
+            for (let bz = finalMinZ; bz <= finalMaxZ; bz++) {
+                const key = `${bx},${by},${bz}`;
+                if (!world[key]) continue;
+                
+                const blockMinX = bx;
+                const blockMaxX = bx + 1;
+                const blockMinY = by;
+                const blockMaxY = by + 1;
+                const blockMinZ = bz;
+                const blockMaxZ = bz + 1;
+                
+                if (!(correctedX + playerWidth < blockMinX || correctedX - playerWidth > blockMaxX ||
+                      correctedY + playerEyeHeight < blockMinY || correctedY - playerEyeHeight > blockMaxY ||
+                      correctedZ + playerWidth < blockMinZ || correctedZ - playerWidth > blockMaxZ)) {
+                    // Player is inside block - push out
+                    const overlapX = Math.min(correctedX + playerWidth - blockMinX, blockMaxX - (correctedX - playerWidth));
+                    const overlapY = Math.min(correctedY + playerEyeHeight - blockMinY, blockMaxY - (correctedY - playerEyeHeight));
+                    const overlapZ = Math.min(correctedZ + playerWidth - blockMinZ, blockMaxZ - (correctedZ - playerWidth));
                     
-                    // Resolve on axis with smallest overlap
                     if (overlapY < overlapX && overlapY < overlapZ) {
-                        canMoveY = false;
-                        if (newY > by + 1) {
-                            // Hitting head
-                            velocity.y = 0;
+                        if (correctedY > by + 0.5) {
+                            correctedY = blockMaxY + playerEyeHeight + 0.01;
                         } else {
-                            // On ground
-                            onGround = true;
-                            canJump = true;
+                            correctedY = blockMinY - playerEyeHeight - 0.01;
                         }
                     } else if (overlapX < overlapZ) {
-                        canMoveX = false;
+                        if (correctedX < bx + 0.5) {
+                            correctedX = blockMinX - playerWidth - 0.01;
+                        } else {
+                            correctedX = blockMaxX + playerWidth + 0.01;
+                        }
                     } else {
-                        canMoveZ = false;
+                        if (correctedZ < bz + 0.5) {
+                            correctedZ = blockMinZ - playerWidth - 0.01;
+                        } else {
+                            correctedZ = blockMaxZ + playerWidth + 0.01;
+                        }
                     }
                 }
             }
         }
     }
 
-    // Apply movement
-    if (canMoveX) camera.position.x = newX;
-    if (canMoveZ) camera.position.z = newZ;
+    // Apply corrected movement to player position
+    playerPosition.x = correctedX;
+    playerPosition.z = correctedZ;
+    playerPosition.y = correctedY;
     
-    if (canMoveY) {
-        camera.position.y = newY;
-    } else {
-        if (onGround) {
-            velocity.y = 0;
-        } else if (velocity.y < 0) {
-            velocity.y = 0;
+    // Update velocity if on ground
+    if (onGround && velocity.y < 0) {
+        velocity.y = 0;
+    }
+    
+    // Update player group position (for model rendering)
+    playerGroup.position.x = playerPosition.x;
+    playerGroup.position.z = playerPosition.z;
+    playerGroup.position.y = playerPosition.y - 0.9; // Ground level
+    
+    // Update camera based on mode
+    if (cameraMode === 'third') {
+        // Make player model visible
+        if (playerModel) {
+            playerModel.visible = true;
         }
+        
+        // Calculate third-person camera position (behind player)
+        const eyePos = playerPosition.clone();
+        
+        // Get camera direction from quaternion
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyQuaternion(camera.quaternion);
+        
+        // Calculate offset (behind and slightly above player)
+        const offset = new THREE.Vector3(0, 0.3, 4);
+        offset.applyQuaternion(camera.quaternion);
+        
+        // Target camera position
+        const targetCameraPos = eyePos.clone().sub(offset);
+        
+        // Smoothly move camera
+        camera.position.lerp(targetCameraPos, 0.15);
+        
+        // Make camera look at player
+        const lookAtPos = eyePos.clone();
+        lookAtPos.y += 0.2; // Look slightly above center
+        camera.lookAt(lookAtPos);
+    } else {
+        // Make player model invisible in first-person
+        if (playerModel) {
+            playerModel.visible = false;
+        }
+        
+        // In first-person, camera is at player eye position
+        camera.position.copy(playerPosition);
+        camera.position.y += 0.9; // Eye height
     }
 
     // Respawn if fall too far
-    if (camera.position.y < -10) {
-        camera.position.set(0, 25, 0);
+    if (playerPosition.y < -10) {
+        playerPosition.set(0, 25, 0);
         velocity.set(0, 0, 0);
+        health = Math.max(0, health - 2);
+        updateHealthBar();
     }
     
     // Continue breaking block if holding mouse
     if (isBreaking) {
         breakBlock();
     }
+    
+    // Gradually decrease food (slower rate)
+    food = Math.max(0, food - delta * 0.005);
+    if (food <= 0) {
+        health = Math.max(0, health - delta * 0.2);
+    }
+    
+    // Update UI periodically for performance
+    if (!updatePlayer.lastUIUpdate) updatePlayer.lastUIUpdate = 0;
+    updatePlayer.lastUIUpdate += delta;
+    if (updatePlayer.lastUIUpdate >= 0.2) { // Update every 0.2 seconds
+        updateFoodBar();
+        updateHealthBar();
+        updatePlayer.lastUIUpdate = 0;
+    }
 }
 
-// Animation loop - optimized for 60 FPS
+// Animation loop - optimized for 120 FPS
+let targetFPS = 120;
+let frameInterval = 1000 / targetFPS;
+let lastFrameTime = performance.now();
+let lastUpdateTime = performance.now();
+
 function animate() {
     requestAnimationFrame(animate);
 
-    const time = performance.now();
-    let delta = (time - prevTime) / 1000;
-    prevTime = time;
+    const currentTime = performance.now();
+    const elapsed = currentTime - lastFrameTime;
     
-    // Cap delta to prevent large jumps
-    delta = Math.min(delta, 0.1);
-    
-    // Calculate FPS
-    fpsCounter++;
-    if (time - fpsTime >= 1000) {
-        fps = fpsCounter;
-        fpsCounter = 0;
-        fpsTime = time;
-        updateFPSDisplay();
+    if (elapsed >= frameInterval) {
+        const time = performance.now();
+        let delta = (time - prevTime) / 1000;
+        prevTime = time;
+        
+        // Cap delta to prevent large jumps
+        delta = Math.min(delta, 0.1);
+        
+        // Calculate FPS
+        fpsCounter++;
+        if (time - fpsTime >= 1000) {
+            fps = fpsCounter;
+            fpsCounter = 0;
+            fpsTime = time;
+            updateFPSDisplay();
+        }
+
+        // Update game logic
+        updatePlayer(delta);
+        
+        // Update block name less frequently for performance
+        if (time - lastUpdateTime >= 100) {
+            updateBlockName();
+            lastUpdateTime = time;
+        }
+        
+        // Update entities less frequently for performance
+        if (entities.length > 0) {
+            updateEntities(delta);
+        }
+
+        renderer.render(scene, camera);
+        lastFrameTime = currentTime - (elapsed % frameInterval);
     }
-
-    updatePlayer(delta);
-    updateBlockName();
-
-    renderer.render(scene, camera);
 }
 
 // Update FPS display
